@@ -794,52 +794,60 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// generate maze 
 function generateMaze() {
-  maze = [];
-  rooms = [];
-  doors = [];
+  maze = []; // 2d maze array
+  rooms = []; // room list
+  doors = []; // doors list
   
+  // fill everything with walls (MAZE_H x MAZE_W)
   for (let y = 0; y < MAZE_H; y++) {
-    maze[y] = [];
+    maze[y] = []; // create y row
     for (let x = 0; x < MAZE_W; x++) {
-      maze[y][x] = WALL;
+      maze[y][x] = WALL; // every cell is a wall
     }
   }
   
-  const numRooms = 40 + Math.floor(Math.random() * 25);
+  const numRooms = 40 + Math.floor(Math.random() * 25); // constant, generate random numbers from 40 to 65 rooms
   
-  for (let attempt = 0; attempt < numRooms * 3; attempt++) {
+  // 3 attempts per room to be generated (bcz the overlap)
+  for (let attempt = 0; attempt < numRooms * 3; attempt++ ) {
     let roomW, roomH;
-    const sizeRoll = Math.random();
+    const sizeRoll = Math.random(); // random num from 0 to 1
     
-    if (sizeRoll < 0.2) {
+    if (sizeRoll < 0.2) { // 20% chance for big rooms
       roomW = 8 + Math.floor(Math.random() * 6);
       roomH = 8 + Math.floor(Math.random() * 6);
-    } else if (sizeRoll < 0.5) {
+    } else if (sizeRoll < 0.5) { // 50% chance for medium rooms
       roomW = 5 + Math.floor(Math.random() * 4);
       roomH = 5 + Math.floor(Math.random() * 4);
-    } else {
+    } else { // 30% chance for small rooms
       roomW = 3 + Math.floor(Math.random() * 3);
       roomH = 3 + Math.floor(Math.random() * 3);
     }
     
+    // random position for the room, with a 2 cell margin from the borders
     const roomX = 2 + Math.floor(Math.random() * (MAZE_W - roomW - 4));
     const roomY = 2 + Math.floor(Math.random() * (MAZE_H - roomH - 4));
     
+    // check for overlap
     let overlap = false;
     for (const room of rooms) {
       if (roomX < room.x + room.w + 1 && roomX + roomW + 1 > room.x &&
           roomY < room.y + room.h + 1 && roomY + roomH + 1 > room.y) {
-        overlap = true;
-        break;
+        overlap = true; // if the new room overlaps with an existing one (with a 1 cell buffer), mark it as overlap
+        break; // no need to check further if we already know it overlaps
       }
     }
     
+    // if no overlap, add more rooms until we reach the max number (numRooms)
     if (!overlap && rooms.length < numRooms) {
-      rooms.push({ x: roomX, y: roomY, w: roomW, h: roomH });
+      rooms.push({ x: roomX, y: roomY, w: roomW, h: roomH }); // save room data in rooms list
       
+      // dig the room in the maze (from wall to floor)
       for (let y = roomY; y < roomY + roomH; y++) {
         for (let x = roomX; x < roomX + roomW; x++) {
+          // dont touch borders
           if (y > 0 && y < MAZE_H - 1 && x > 0 && x < MAZE_W - 1) {
             maze[y][x] = FLOOR;
           }
@@ -848,37 +856,42 @@ function generateMaze() {
     }
   }
   
+  // for each room, connect it to 3 closest rooms
   for (let i = 0; i < rooms.length; i++) {
+    // max 3 connections per room
     const connections = Math.min(3, rooms.length - 1);
+    //order all other rooms for distance from current room
     const sorted = [...rooms].filter((_, idx) => idx !== i)
       .sort((a, b) => {
         const distA = Math.abs(a.x - rooms[i].x) + Math.abs(a.y - rooms[i].y);
         const distB = Math.abs(b.x - rooms[i].x) + Math.abs(b.y - rooms[i].y);
-        return distA - distB;
+        return distA - distB; // sort by distance (closest first)
       });
     
+    // connect to the closest rooms (up to 3)
     for (let j = 0; j < connections; j++) {
       if (sorted[j]) {
-        const roomA = rooms[i];
-        const roomB = sorted[j];
+        const roomA = rooms[i];  // start room
+        const roomB = sorted[j]; // target room
         
+        // room centers
         const startX = Math.floor(roomA.x + roomA.w / 2);
         const startY = Math.floor(roomA.y + roomA.h / 2);
         const endX = Math.floor(roomB.x + roomB.w / 2);
         const endY = Math.floor(roomB.y + roomB.h / 2);
+        // corridor width: 50% chance for 1 cell, 30% chance for 2 cells
+        const corridorW = Math.random() < 0.5 ? 1 : 2;
+        const pathType = Math.random(); // random num to decide path type
         
-        const corridorW = Math.random() < 0.7 ? 1 : 2;
-        const pathType = Math.random();
-        
-        if (pathType < 0.4) {
+        if (pathType < 0.4) { // 40% chance for straight path
           carveCorridorH(startX, endX, startY, corridorW);
           carveCorridorV(startY, endY, endX, corridorW);
           maybeAddDoor(endX, startY);
-        } else if (pathType < 0.8) {
+        } else if (pathType < 0.8) { // 40% change corridor "L" rotated
           carveCorridorV(startY, endY, startX, corridorW);
           carveCorridorH(startX, endX, endY, corridorW);
           maybeAddDoor(startX, endY);
-        } else {
+        } else { // 20% chance for more complex path with a middle point (like a Z or S shape)
           const midX = Math.floor((startX + endX) / 2);
           const midY = Math.floor((startY + endY) / 2);
           carveCorridorH(startX, midX, startY, corridorW);
@@ -889,17 +902,17 @@ function generateMaze() {
       }
     }
   }
-  
+  // add 8 corridors with casual lenght and position
   for (let i = 0; i < 8; i++) {
     const horizontal = Math.random() < 0.5;
     const corridorW = 1;
     
-    if (horizontal) {
+    if (horizontal) { // horizontal corridor
       const y = 3 + Math.floor(Math.random() * (MAZE_H - 6));
       const x1 = 2 + Math.floor(Math.random() * 10);
       const x2 = MAZE_W - 3 - Math.floor(Math.random() * 10);
       carveCorridorH(x1, x2, y, corridorW);
-    } else {
+    } else { // vertical corridor
       const x = 3 + Math.floor(Math.random() * (MAZE_W - 6));
       const y1 = 2 + Math.floor(Math.random() * 10);
       const y2 = MAZE_H - 3 - Math.floor(Math.random() * 10);
@@ -907,18 +920,24 @@ function generateMaze() {
     }
   }
   
-  addDoorsToMaze();
+  addDoorsToMaze(); // add doors to the maze after all corridors are carved
   
+  // constant for random number witch decides where the exit will be
   const exitRoomIdx = Math.floor(Math.random() * Math.max(1, rooms.length - 10));
-  const exitRoom = rooms[exitRoomIdx] || rooms[rooms.length - 1];
+  const exitRoom = rooms[exitRoomIdx] || rooms[rooms.length - 1]; // fallback to last room if something goes wrong with the random index
   
-  exitPos.x = exitRoom.x + exitRoom.w - 2;
-  exitPos.y = exitRoom.y + exitRoom.h - 2;
+  // exit position is in x=2, y=2 from the bottom right corner of the exit room
+  exitPos.x = exitRoom.x + exitRoom.w - 2; // x
+  exitPos.y = exitRoom.y + exitRoom.h - 2; // y
   
-  if (level === 1) {
+  // in level 1 the exit is hidden bcz of the ncp robot.
+  // game will end where the dialogue between npc and player will end.
+  if (level === 1) { // if level = 1
+    // exit cell becomes floor (hidden exit)
     if (maze[exitPos.y] && maze[exitPos.y][exitPos.x] !== undefined) {
       maze[exitPos.y][exitPos.x] = FLOOR;
     }
+    // robot config (position)
     robot.x = exitPos.x + 0.5;
     robot.y = exitPos.y + 0.5;
     robot.active = true;
@@ -926,20 +945,21 @@ function generateMaze() {
     robot.monologueIdx = 0;
     robot.monologueTimer = 0;
     robot.monologueDone = false;
-    
+    // moster is out of the maze
     monster.x = -100;
     monster.y = -100;
   } else {
+    // in other levels, the exit is visible and the robot is not present (maybe i'll add more levelz)
     if (maze[exitPos.y] && maze[exitPos.y][exitPos.x] !== undefined) {
-      maze[exitPos.y][exitPos.x] = EXIT;
+      maze[exitPos.y][exitPos.x] = EXIT; // set EXIT cell to EXIT type
     }
-    robot.active = false;
+    robot.active = false; // deactivate robot for other levels
   }
   
-  const MIN_DIST = 6000 / TILE;
+  const MIN_DIST = 6000 / TILE; // minimum distance from exit for player start (in tile units, 6000/28)
   let validPlayerRoom = null;
-  
-  for (const room of rooms) {
+  // search for a room that is at least MIN_DIST tiles away from the exit, starting from the farthest rooms (the last ones in the list are usually the farthest because of how we generate them)
+  for (const room of rooms) { // HERRREEEEE! 
     const roomCenterX = room.x + room.w / 2;
     const roomCenterY = room.y + room.h / 2;
     const distToExit = Math.sqrt(
